@@ -49,7 +49,7 @@ byte *alloc(Mem_Size size) {
 
 ALLOCATOR(arena_allocator) {
   Context *ctx = get_context();
-  Arena *arena = (Arena *)ctx->allocator_data;
+  Arena *arena = (Arena *)allocator_data;
   
   byte *result = 0;
   switch (type) {
@@ -57,9 +57,14 @@ ALLOCATOR(arena_allocator) {
       result = _arena_push_memory(arena, size, align);
     } break;
     
+    case Alloc_Op_REALLOC: {
+      result = _arena_push_memory(arena, size, align);
+    } break;
+    
     case Alloc_Op_FREE_ALL: {
       arena->size = 0;
     } break;
+    
     
     invalid_default_case;
   }
@@ -83,6 +88,18 @@ void scratch_reset() {
   ctx->scratch.size = 0;
 }
 
+void push_scratch_context() {
+  Context ctx = *get_context();
+  ctx.allocator = scratch_allocator;
+  push_context(ctx);
+}
+
+void push_arena_context(Arena *arena) {
+  Context ctx = *get_context();
+  ctx.allocator = arena_allocator;
+  ctx.allocator_data = arena;
+  push_context(ctx);
+}
 
 #define LVL5_CONTEXT
 #endif

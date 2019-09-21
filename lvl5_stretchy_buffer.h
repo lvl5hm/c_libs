@@ -2,15 +2,13 @@
 #define LVL5_STRETCHY_BUFFER_VERSION 0
 
 #include "lvl5_arena.h"
+#include "lvl5_context.h"
 
 typedef struct {
   u32 count;
   u32 capacity;
-  
-#ifdef LVL5_DEBUG
-  b32 is_growable;
-#endif
-  Arena *arena;
+  Allocator allocator;
+  void *allocator_data;
 } sb_Header;
 
 
@@ -22,57 +20,41 @@ typedef struct {
 #define __get_header(arr) ((sb_Header *)(arr)-1)
 #define sb_count(arr) (__get_header(arr)->count)
 #define sb_capacity(arr) (__get_header(arr)->capacity)
-#define sb_arena(arr) (__get_header(arr)->arena)
 
 #define __need_grow(arr) (!arr || (sb_count(arr) == sb_capacity(arr)))
-#define sb_init(arena, T, capacity, is_growable) __sb_init(arena, capacity, is_growable, sizeof(T))
-void *__sb_init(Arena *arena, u32 capacity, b32 is_growable, u32 item_size) {
+#define sb_new(T, capacity) __sb_init(capacity, sizeof(T))
+void *__sb_init(u32 capacity, Mem_Size item_size) {
+  Context *ctx = get_context();
   sb_Header header = {0};
-  header.capacity = capacity;
-  header.is_growable = is_growable;
-  header.arena = arena;
   header.count = 0;
+  header.capacity = capacity;
+  header.allocator = ctx->allocator;
+  header.allocator_data = ctx->allocator_data;
   
-  void *memory = arena_push_size(arena, sizeof(sb_Header)+item_size*capacity);
+  byte *memory = alloc(sizeof(sb_Header) + item_size*capacity);
   *(sb_Header *)memory = header;
-  return (byte *)memory + sizeof(sb_Header);
+  return memory + sizeof(sb_Header);
 }
 
-#define sb_push(arr, item) __need_grow(arr) ? __grow(&(arr), sizeof(item), true) : 0, (arr)[sb_count(arr)++] = item
+#define sb_push(arr, item) __need_grow(arr) ? __grow(&(arr), sizeof(item)) : 0, (arr)[sb_count(arr)++] = item
 
-void *__grow(void *arr_ptr_, Mem_Size item_size, b32 is_growable) {
+void *__grow(void *arr_ptr_, Mem_Size item_size) {
   void **arr_ptr = (void **)arr_ptr_;
   void *arr = *arr_ptr;
+  assert(arr);
   
   sb_Header *header = __get_header(arr);
-  assert(header->arena);
-  
-#ifdef LVL5_DEBUG
-  if (arr) {
-    assert(header->is_growable == is_growable);
-  }
-#endif
-  
-  void *result = arr;
   
   i32 new_capacity = header->capacity*LVL5_STRETCHY_BUFFER_GROW_FACTOR;
-  
   u32 header_size = sizeof(sb_Header);
-  result = arena_push_size(header->arena, 
-                           new_capacity*item_size + header_size) + header_size;
+  byte *result = header->allocator(Alloc_Op_REALLOC, new_capacity*item_size + header_size, header->allocator_data, null, 0, 16) + header_size;
   copy_memory_slow(result, arr, header->capacity*item_size);
   
   sb_Header *new_header = __get_header(result);
-  new_header->arena = header->arena;
-  new_header->count = header->count;
+  *new_header = *header;
   new_header->capacity = new_capacity;
-  new_header->is_growable = header->is_growable;
   
   *arr_ptr = result;
-  
-#ifdef LVL5_DEBUG
-  __get_header(result)->is_growable = is_growable;
-#endif
   
   return 0;
 }

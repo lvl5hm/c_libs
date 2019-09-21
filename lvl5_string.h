@@ -3,6 +3,7 @@
 
 #include "lvl5_types.h"
 #include "lvl5_arena.h"
+#include "lvl5_context.h"
 
 typedef struct {
   char *data;
@@ -80,17 +81,17 @@ String substring(String s, u32 begin, u32 end) {
   return result;
 }
 
-String concat(Arena *arena, String a, String b) {
+String concat(String a, String b) {
   String result;
-  result.data = arena_push_array(arena, char, a.count + b.count);
+  result.data = (char *)scratch_alloc(sizeof(char)*(a.count + b.count));
   result.count = a.count + b.count;
   copy_memory_slow(result.data, a.data, a.count);
   copy_memory_slow(result.data + a.count, b.data, b.count);
   return result;
 }
 
-char *to_c_string(Arena *arena, String a) {
-  char *result = arena_push_array(arena, char, a.count + 1);
+char *to_c_string(String a) {
+  char *result = (char *)scratch_alloc(sizeof(char)*(a.count + 1));
   copy_memory_slow(result, a.data, a.count);
   result[a.count] = '\0';
   return result;
@@ -238,10 +239,11 @@ String f32_to_string(Arena *arena, f32 num, i32 decimal_count) {
   float_part *= 10*(decimal_count - leading_zeros);
   String float_string = i64_to_string(arena, (i64)float_part);
   
-  String result = concat(arena, int_string, concat(arena, zero_string, float_string));
+  String result = concat(int_string, concat(zero_string, float_string));
   return result;
 }
 
+#if 0
 String arena_sprintf(Arena *arena, String fmt, ...) {
   String result = {0};
   
@@ -279,6 +281,7 @@ String arena_sprintf(Arena *arena, String fmt, ...) {
   
   return result;
 }
+#endif
 
 
 #define LVL5_STRING

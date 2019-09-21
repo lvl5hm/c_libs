@@ -34,6 +34,7 @@ typedef void FNGLTEXIMAGE2D(GLenum target,
 
 typedef void FNGLGENERATEMIPMAPPROC(GLenum thing);
 typedef void FNGLENABLEPROC(GLenum thing);
+typedef void FNGLDISABLEPROC(GLenum thing);
 typedef void FNGLBLENDFUNCPROC(GLenum src, GLenum dst);
 typedef void FNGLDELETETEXTURESPROC(GLsizei n, GLuint *textures);
 typedef void FNGLVIEWPORTPROC(GLint x, GLint y, GLsizei width, GLsizei height);
@@ -77,6 +78,7 @@ typedef struct {
   PFNGLUNIFORMMATRIX3FVPROC UniformMatrix3fv;
   PFNGLUNIFORMMATRIX4FVPROC UniformMatrix4fv;
   
+  FNGLDISABLEPROC *Disable;
   FNGLCLEARCOLORPROC *ClearColor;
   FNGLCLEARPROC *Clear;
   FNGLDRAWARRAYSPROC *DrawArrays;
