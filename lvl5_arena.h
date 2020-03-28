@@ -2,6 +2,7 @@
 #define LVL5_ARENA_VERSION 0
 
 #include "lvl5_types.h"
+#include "lvl5_intrinsics.h"
 
 typedef struct {
   byte *data;
@@ -17,6 +18,16 @@ typedef struct {
 void copy_memory_slow(void *dst, void *src, Mem_Size size) {
   for (u64 i = 0; i < size; i++) {
     ((byte *)dst)[i] = ((byte *)src)[i];
+  }
+}
+
+void zero_memory_fast(void *dst, Mem_Size size) {
+  assert((size & 15) == 0);
+  assert(((Mem_Size)dst & 15) == 0);
+  
+  __m128 zero = _mm_set_ps1(0);
+  for (Mem_Size i = 0; i < size; i += 16) {
+    _mm_store_ps((f32 *)((byte *)dst + i), zero);
   }
 }
 

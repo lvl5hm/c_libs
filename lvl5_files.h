@@ -1,11 +1,14 @@
 #ifndef LVL5_FILES
+#include <lvl5_context.h>
 #include <stdio.h>
+
+
 
 
 typedef struct {
   i32 width;
   i32 height;
-  byte *data;
+  u32 *data;
 } Bitmap;
 
 #pragma pack(push, 1)
@@ -75,7 +78,7 @@ Bitmap bmp_load(char *file_name) {
   assert(header->info.bits_per_pixel == 32);
   
   Bitmap result = {0};
-  result.data = file_data + header->data_offset;;
+  result.data = (u32 *)(file_data + header->data_offset);
   result.width = header->info.width;
   result.height = header->info.height;
   
@@ -115,6 +118,116 @@ void bmp_save(char *file_name, Bitmap bmp) {
   fwrite(bmp.data, info.image_size, 1, file);
   
   fclose(file);
+}
+
+
+
+
+
+Bitmap make_empty_bitmap(i32 width, i32 height) {
+  Bitmap result;
+  result.width = width;
+  result.height = height;
+  
+  Mem_Size size = align_pow_2(width*height*sizeof(u32), 16);
+  result.data = (u32 *)alloc(size);
+  zero_memory_fast(result.data, size);
+  return result;
+}
+
+
+
+
+
+
+
+// fonts
+#include <lvl5_math.h>
+
+typedef struct {
+  Bitmap bmp;
+  Rect2i *rects;
+  i32 count;
+} Texture_Atlas;
+
+typedef struct {
+  Texture_Atlas atlas;
+  char first_codepoint;
+  i32 codepoint_count;
+  V2 *origins;
+  
+  i8 *advance;
+  i8 *kerning;
+  i8 line_spacing;
+  i8 line_height;
+  i8 descent;
+} Font;
+
+
+Texture_Atlas texture_atlas_make_from_bitmaps(Bitmap *bitmaps, i32 bitmap_count, i32 atlas_width) {
+  Texture_Atlas result = {0};
+  result.rects = alloc_array(Rect2i, bitmap_count);
+  result.count = bitmap_count;
+  
+  i32 total_height = 0;
+  
+  i32 row_height = 0;
+  i32 row_width = 0;
+  
+  i32 PADDING = 2;
+  
+  for (i32 i = 0; i < bitmap_count; i++) {
+    Bitmap bmp = bitmaps[i];
+    if (row_width + bmp.width > atlas_width) {
+      total_height += row_height;
+      row_width = 0;
+      row_height = 0;
+    }
+    
+    result.rects[i] = rect2i_min_size(v2i(row_width, total_height),
+                                      v2i(bmp.width, bmp.height));
+    row_width += bmp.width + PADDING;
+    if (bmp.height > row_height) {
+      row_height = bmp.height;
+    }
+  }
+  
+  total_height += row_height;
+  result.bmp = make_empty_bitmap(atlas_width, total_height);
+  
+  for (i32 i = 0; i < bitmap_count; i++) {
+    Rect2i rect = result.rects[i];
+    Bitmap bmp = bitmaps[i];
+    
+    for (i32 y = 0; y < bmp.height; y++) {
+      for (i32 x = 0; x < bmp.width; x++) {
+        result.bmp.data[(rect.min.y + y)*result.bmp.width + rect.min.x + x] = bmp.data[y*bmp.width + x];
+      }
+    }
+  }
+  
+  
+  return result;
+}
+
+
+i32 font_get_char(Font *font, char c) {
+  assert(c >= font->first_codepoint && c <= font->first_codepoint + font->codepoint_count);
+  i32 result = c - font->first_codepoint;
+  return result;
+}
+
+i8 font_get_advance(Font *font, char a, char b) {
+  i32 a_index = font_get_char(font, a);
+  
+  i8 result = font->advance[a_index];
+  if (b >= font->first_codepoint && b <= font->first_codepoint + font->codepoint_count)
+  {
+    i32 b_index = font_get_char(font, b);
+    result += font->kerning[a_index*font->codepoint_count + b_index];
+  }
+  
+  return result;
 }
 
 

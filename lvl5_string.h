@@ -7,31 +7,31 @@
 
 typedef struct {
   char *data;
-  u32 count;
+  u64 count;
 } String;
 
 #define const_string(const_char) make_string(const_char, array_count(const_char)-1)
 
-String make_string(char *data, u32 count) {
+String make_string(char *data, u64 count) {
   String result;
   result.data = data;
   result.count = count;
   return result;
 }
 
-String alloc_string(Arena *arena, char *data, u32 count) {
+String alloc_string(char *data, u64 count) {
   String result;
-  result.data = arena_push_array(arena, char, count);
+  result.data = alloc_array(char, count);
   copy_memory_slow(result.data, data, count);
   result.count = count;
   return result;
 }
 
-i32 find_last_index(String str, String substr) {
-  for (u32 i = str.count - substr.count - 1; i >= 0; i--)
+i64 find_last_index(String str, String substr, i64 start_index) {
+  for (u64 i = start_index - substr.count - 1; i >= 0; i--)
   {
-    u32 srcIndex = i;
-    u32 testIndex = 0;
+    u64 srcIndex = i;
+    u64 testIndex = 0;
     while (str.data[srcIndex] == substr.data[testIndex])
     {
       srcIndex++;
@@ -74,7 +74,7 @@ b32 starts_with(String str, String substr) {
   return result;
 }
 
-String substring(String s, u32 begin, u32 end) {
+String substring(String s, u64 begin, u64 end) {
   String result;
   result.data = s.data + begin;
   result.count = end - begin;
@@ -141,7 +141,7 @@ b32 string_compare(String a, String b) {
 i32 string_to_i32(String str) {
   i32 result = 0;
   for (u32 i = 0; i < str.count; i++) {
-    i32 power = str.count - i - 1;
+    i32 power = (i32)(str.count - i - 1);
     i32 a = (i32)(str.data[i] - '0');
     result += a*pow_i32(10, power);
   }
@@ -180,6 +180,7 @@ String i32_to_string(Arena *arena, i32 num) {
 }
 
 
+#if 0
 String i64_to_string(Arena *arena, i64 num) {
   u64 LENGTH = 20;
   char *str = arena_push_array(arena, char, LENGTH + 1);
@@ -212,11 +213,11 @@ String i64_to_string(Arena *arena, i64 num) {
 }
 
 
-String f32_to_string(Arena *arena, f32 num, i32 decimal_count) {
+String f32_to_string(f32 num, i32 decimal_count) {
   i32 int_part = (i32)num;
   f32 float_part = num - int_part;
   
-  String int_string = i64_to_string(arena, int_part);
+  String int_string = i64_to_string(int_part);
   
   i32 leading_zeros = 0;
   while (true) {
@@ -234,7 +235,7 @@ String f32_to_string(Arena *arena, f32 num, i32 decimal_count) {
   for (i32 i = 0; i < leading_zeros; i++) {
     str[i+1] = '0';
   }
-  String zero_string = alloc_string(arena, str, leading_zeros+1);
+  String zero_string = alloc_string(str, leading_zeros+1);
   
   float_part *= 10*(decimal_count - leading_zeros);
   String float_string = i64_to_string(arena, (i64)float_part);
@@ -242,6 +243,9 @@ String f32_to_string(Arena *arena, f32 num, i32 decimal_count) {
   String result = concat(int_string, concat(zero_string, float_string));
   return result;
 }
+
+#endif
+
 
 #if 0
 String arena_sprintf(Arena *arena, String fmt, ...) {

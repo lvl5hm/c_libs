@@ -7,7 +7,6 @@ typedef enum {
   Alloc_Op_NONE,
   Alloc_Op_ALLOC,
   Alloc_Op_FREE,
-  Alloc_Op_REALLOC,
   Alloc_Op_FREE_ALL,
 } Alloc_Op;
 
@@ -18,7 +17,7 @@ typedef struct {
   Allocator allocator;
   void *allocator_data;
   
-  Arena scratch;
+  Arena *scratch;
 } Context;
 
 typedef struct {
@@ -41,10 +40,17 @@ void pop_context() {
   global_context_info->stack_count--;
 }
 
+#define alloc_struct(T) (T *)alloc(sizeof(T))
+#define alloc_array(T, count) (T *)alloc(sizeof(T)*count)
 byte *alloc(Mem_Size size) {
   Context *ctx = get_context();
   byte *result = ctx->allocator(Alloc_Op_ALLOC, size, ctx->allocator_data, null, 0, 16);
   return result;
+}
+
+void free_memory(void *ptr) {
+  Context *ctx = get_context();
+  ctx->allocator(Alloc_Op_FREE, 0, ctx->allocator_data, ptr, 0, 0);
 }
 
 ALLOCATOR(arena_allocator) {
@@ -54,10 +60,6 @@ ALLOCATOR(arena_allocator) {
   byte *result = 0;
   switch (type) {
     case Alloc_Op_ALLOC: {
-      result = _arena_push_memory(arena, size, align);
-    } break;
-    
-    case Alloc_Op_REALLOC: {
       result = _arena_push_memory(arena, size, align);
     } break;
     
@@ -74,24 +76,54 @@ ALLOCATOR(arena_allocator) {
 
 ALLOCATOR(scratch_allocator) {
   Context *ctx = get_context();
-  byte *result = arena_allocator(type, size, &ctx->scratch, old_ptr, old_size, align);
+  
+  byte *result = null;
+  switch (type) {
+    case Alloc_Op_ALLOC: {
+      result = arena_allocator(type, size, 
+                               ctx->scratch, old_ptr,
+                               old_size, align);
+    } break;
+    
+    case Alloc_Op_FREE: {
+    } break;
+    
+    
+    invalid_default_case;
+  }
+  return result;
+  
   return result;
 }
+
+#define scratch_push_struct(T) (T *)scratch_alloc(sizeof(T))
+#define scratch_push_array(T, count) (T *)scratch_alloc(sizeof(T)*count)
 
 byte *scratch_alloc(Mem_Size size) {
   byte *result = scratch_allocator(Alloc_Op_ALLOC, size, null, null, 0, 16);
   return result;
 }
 
+Mem_Size scratch_get_mark() {
+  Context *ctx = get_context();
+  return arena_get_mark(ctx->scratch);
+}
+
+void scratch_set_mark(Mem_Size mark) {
+  Context *ctx = get_context();
+  arena_set_mark(ctx->scratch, mark);
+}
+
 void scratch_reset() {
   Context *ctx = get_context();
-  ctx->scratch.size = 0;
+  ctx->scratch->size = 0;
 }
 
 void push_scratch_context() {
-  Context ctx = *get_context();
-  ctx.allocator = scratch_allocator;
-  push_context(ctx);
+  Context *ctx = get_context();
+  Context ctx2 = *ctx;
+  ctx2.allocator = scratch_allocator;
+  push_context(ctx2);
 }
 
 void push_arena_context(Arena *arena) {
@@ -100,6 +132,39 @@ void push_arena_context(Arena *arena) {
   ctx.allocator_data = arena;
   push_context(ctx);
 }
+
+
+
+ALLOCATOR(system_allocator) {
+  byte *result = null;
+  switch (type) {
+    case Alloc_Op_ALLOC: {
+      result = (byte *)malloc(size);
+    } break;
+    
+    case Alloc_Op_FREE: {
+      free(old_ptr);
+    } break;
+    
+    invalid_default_case;
+  }
+  return result;
+}
+
+
+void context_init(Mem_Size scratch_size) {
+  Global_Context_Info *info = calloc(1, sizeof(Global_Context_Info));
+  global_context_info = info;
+  
+  Context default_ctx = {0};
+  default_ctx.allocator = system_allocator;
+  Arena *scratch = malloc(sizeof(Arena));
+  arena_init(scratch, malloc(scratch_size), scratch_size);
+  default_ctx.scratch = scratch;
+  
+  push_context(default_ctx);
+}
+
 
 #define LVL5_CONTEXT
 #endif

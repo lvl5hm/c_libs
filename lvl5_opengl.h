@@ -10,8 +10,14 @@
 #define WINGDIAPI __declspec(dllimport)
 #endif
 
+
 #include <GL/gl.h>
-#include "KHR/glext.h"
+#include <KHR/glext.h>
+
+
+
+
+
 
 typedef void FNGLCLEARPROC(GLuint buffer_bit);
 typedef void FNGLCLEARCOLORPROC(GLfloat r, GLfloat g, GLfloat b, GLfloat a);
@@ -38,6 +44,7 @@ typedef void FNGLDISABLEPROC(GLenum thing);
 typedef void FNGLBLENDFUNCPROC(GLenum src, GLenum dst);
 typedef void FNGLDELETETEXTURESPROC(GLsizei n, GLuint *textures);
 typedef void FNGLVIEWPORTPROC(GLint x, GLint y, GLsizei width, GLsizei height);
+
 
 
 typedef struct {
@@ -100,29 +107,25 @@ typedef struct {
   String fragment;
 } gl_Parse_Result;
 
-gl_Parse_Result gl_parse_glsl(String src)
-{
-  String vertex_search_string = const_string("#shader vertex");
-  i32 vertex_index = find_index(src, vertex_search_string, 0);
-  String fragment_search_string = const_string("#shader fragment");
-  i32 fragment_index = find_index(src, fragment_search_string, 0);
+gl_Parse_Result gl_parse_glsl(String src) {
+  String vertex_header = const_string("#shader vertex");
+  i64 vertex_index = find_index(src, vertex_header, 0);
+  assert(vertex_index != -1);
+  String frag_header = const_string("#shader fragment");
+  i64 frag_index = find_index(src, frag_header, 0);
+  assert(frag_index != -1);
   
   gl_Parse_Result result;
-  result.vertex = make_string(src.data + vertex_index +
-                              vertex_search_string.count, 
-                              fragment_index - vertex_index - 
-                              vertex_search_string.count);
-  result.fragment = make_string(src.data + fragment_index + 
-                                fragment_search_string.count,
-                                src.count - fragment_index - 
-                                fragment_search_string.count);
+  result.vertex = make_string(src.data + vertex_index + vertex_header.count, 
+                              frag_index - vertex_index - vertex_header.count);
+  result.fragment = make_string(src.data + frag_index + frag_header.count,
+                                src.count - frag_index - frag_header.count);
   
   return result;
 }
 
-u32 gl_compile_shader(Arena *arena, gl_Funcs gl, u32 type, String src)
-{
-  u32 id = gl.CreateShader(type);
+GLuint gl_compile_shader(gl_Funcs gl, u32 type, String src) {
+  GLuint id = gl.CreateShader(type);
   gl.ShaderSource(id, 1, &src.data, (i32 *)&src.count);
   gl.CompileShader(id);
   
@@ -132,7 +135,7 @@ u32 gl_compile_shader(Arena *arena, gl_Funcs gl, u32 type, String src)
   {
     i32 length;
     gl.GetShaderiv(id, GL_INFO_LOG_LENGTH, &length);
-    char *message = arena_push_array(arena, char, length);
+    char *message = scratch_push_array(char, length);
     gl.GetShaderInfoLog(id, length, &length, message);
     assert(false);
   }
@@ -140,11 +143,10 @@ u32 gl_compile_shader(Arena *arena, gl_Funcs gl, u32 type, String src)
   return id;
 }
 
-u32 gl_create_shader(Arena *arena, gl_Funcs gl, String vertex_src, String fragment_src)
-{
-  u32 program = gl.CreateProgram();
-  u32 vertex_shader = gl_compile_shader(arena, gl, GL_VERTEX_SHADER, vertex_src);
-  u32 fragment_shader = gl_compile_shader(arena, gl, GL_FRAGMENT_SHADER, fragment_src);
+GLuint gl_create_shader(gl_Funcs gl, String vertex_src, String fragment_src) {
+  GLuint program = gl.CreateProgram();
+  GLuint vertex_shader = gl_compile_shader(gl, GL_VERTEX_SHADER, vertex_src);
+  GLuint fragment_shader = gl_compile_shader(gl, GL_FRAGMENT_SHADER, fragment_src);
   
   gl.AttachShader(program, vertex_shader);
   gl.AttachShader(program, fragment_shader);
@@ -157,19 +159,28 @@ u32 gl_create_shader(Arena *arena, gl_Funcs gl, String vertex_src, String fragme
   return program;
 }
 
-void gl_set_uniform_mat3(gl_Funcs gl, GLint program, char *name, mat3 *value, u32 count) {
+GLuint gl_create_shader_from_file(gl_Funcs gl, String (*os_read_entire_file)(String), String file_name) {
+  String shader_file = os_read_entire_file(file_name);
+  gl_Parse_Result shader_src = gl_parse_glsl(shader_file);
+  GLuint shader = gl_create_shader(gl, shader_src.vertex, shader_src.fragment);
+  return shader;
+}
+
+void gl_set_uniform_m3(gl_Funcs gl, GLint program,
+                       char *name, M3 *value, u32 count) {
   GLint uniform_loc = gl.GetUniformLocation(program, name);
   gl.UniformMatrix3fv(uniform_loc, count, GL_TRUE, (GLfloat *)value);
 }
 
 
-void gl_set_uniform_mat4(gl_Funcs gl, GLint program, char *name, mat4 *value, u32 count) {
+void gl_set_uniform_m4(gl_Funcs gl, GLint program,
+                       char *name, M4 *value, u32 count) {
   GLint uniform_loc = gl.GetUniformLocation(program, name);
   gl.UniformMatrix4fv(uniform_loc, count, GL_TRUE, (GLfloat *)value);
 }
 
 
-void gl_set_uniform_v4(gl_Funcs gl, GLint program, char *name, v4 value) {
+void gl_set_uniform_v4(gl_Funcs gl, GLint program, char *name, V4 value) {
   GLint uniform_loc = gl.GetUniformLocation(program, name);
   gl.Uniform4f(uniform_loc, value.x, value.y, value.z, value.w);
 }

@@ -31,12 +31,19 @@ void *__sb_init(u32 capacity, Mem_Size item_size) {
   header.allocator = ctx->allocator;
   header.allocator_data = ctx->allocator_data;
   
-  byte *memory = alloc(sizeof(sb_Header) + item_size*capacity);
+  byte *memory = header.allocator(Alloc_Op_ALLOC,
+                                  sizeof(sb_Header) + item_size*capacity,
+                                  header.allocator_data, null, 0, 16);
   *(sb_Header *)memory = header;
   return memory + sizeof(sb_Header);
 }
 
-#define sb_push(arr, item) __need_grow(arr) ? __grow(&(arr), sizeof(item)) : 0, (arr)[sb_count(arr)++] = item
+void sb_free(void *arr) {
+  sb_Header *header = (sb_Header *)arr - 1;
+  header->allocator(Alloc_Op_FREE, 0, header->allocator_data, header, 0, 16);
+}
+
+#define sb_push(arr, item) (__need_grow(arr) ? __grow(&(arr), sizeof(item)) : 0, (arr)[sb_count(arr)++] = (item))
 
 void *__grow(void *arr_ptr_, Mem_Size item_size) {
   void **arr_ptr = (void **)arr_ptr_;
@@ -47,7 +54,7 @@ void *__grow(void *arr_ptr_, Mem_Size item_size) {
   
   i32 new_capacity = header->capacity*LVL5_STRETCHY_BUFFER_GROW_FACTOR;
   u32 header_size = sizeof(sb_Header);
-  byte *result = header->allocator(Alloc_Op_REALLOC, new_capacity*item_size + header_size, header->allocator_data, null, 0, 16) + header_size;
+  byte *result = header->allocator(Alloc_Op_ALLOC, new_capacity*item_size + header_size, header->allocator_data, null, 0, 16) + header_size;
   copy_memory_slow(result, arr, header->capacity*item_size);
   
   sb_Header *new_header = __get_header(result);
